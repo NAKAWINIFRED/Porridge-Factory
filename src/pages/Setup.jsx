@@ -28,10 +28,19 @@ export default function Setup() {
 }
 
 function People() {
-  const { state } = useStore();
+  const { state, me, del } = useStore();
   const { regionName, O } = useLookup();
-  const { open } = useUI();
+  const { open, toast } = useUI();
   const [showRoles, setShowRoles] = useState(false);
+  const [busyId, setBusyId] = useState("");
+
+  const removePerson = async (u) => {
+    setBusyId(u.id);
+    const ok = await del(`/api/users/${encodeURIComponent(u.id)}`);
+    setBusyId("");
+    if (ok) toast(`${u.name} removed`);
+  };
+
   const covers = (u) => u.role === "regional_manager" ? (u.regionIds?.length ? u.regionIds.map(regionName).join(", ") : <span className="warn-text">No region yet</span>)
     : u.role === "store_user" ? (u.outletIds?.length ? u.outletIds.map((id) => O(id)?.name || "?").join(", ") : <span className="warn-text">No supermarket yet</span>)
     : <span className="muted">Everything</span>;
@@ -53,6 +62,15 @@ function People() {
           { label: "Sees", render: covers },
           { label: "Signs in as", render: (u) => (u.canSignIn ? <span className="mono">{u.username}</span> : <span className="muted">Can't sign in yet</span>) },
           { label: "", render: (u) => (u.active === false ? <Pill status={["Switched off", "mute"]} /> : <Pill status={["Active", "good"]} />) },
+          { label: "", render: (u) => (
+              u.id === me?.id ? null : (
+                <span className="row-actions" onClick={(e) => e.stopPropagation()}>
+                  <ConfirmButton className="btn small ghost warn-text" confirmText="Click again to delete" disabled={busyId === u.id} onConfirm={() => removePerson(u)}>
+                    {busyId === u.id ? "Deleting…" : "Delete"}
+                  </ConfirmButton>
+                </span>
+              )
+            ) },
         ]} />
       <p className="muted small">Regional managers only see the supermarkets in their regions. Supermarket users only see their own supermarket. Click a person to change their role, what they see, or their password.</p>
     </Panel>
@@ -60,9 +78,18 @@ function People() {
 }
 
 function Regions() {
-  const { state } = useStore();
-  const { open } = useUI();
+  const { state, del } = useStore();
+  const { open, toast } = useUI();
+  const [busyId, setBusyId] = useState("");
   const unplaced = state.outlets.filter((o) => !o.regionId);
+
+  const removeRegion = async (r) => {
+    setBusyId(r.id);
+    const ok = await del(`/api/regions/${encodeURIComponent(r.id)}`);
+    setBusyId("");
+    if (ok) toast(`${r.name} deleted`);
+  };
+
   return (
     <Panel title="Regions" right={<button className="btn primary" onClick={() => open("regionForm")}>Add region</button>}>
       <DataTable rows={state.regions.slice().sort(byKey("name"))} onRowClick={(r) => open("regionForm", { id: r.id })} empty="No regions yet. Add one, then put supermarkets in it."
@@ -73,6 +100,13 @@ function Regions() {
               return m.length ? m.map((u) => u.name).join(", ") : <span className="warn-text">None yet</span>;
             } },
           { label: "Supermarkets", render: (r) => state.outlets.filter((o) => o.regionId === r.id).map((o) => o.name).join(", ") || <span className="muted">None</span> },
+          { label: "", render: (r) => (
+              <span className="row-actions" onClick={(e) => e.stopPropagation()}>
+                <ConfirmButton className="btn small ghost warn-text" confirmText="Click again to delete" disabled={busyId === r.id} onConfirm={() => removeRegion(r)}>
+                  {busyId === r.id ? "Deleting…" : "Delete"}
+                </ConfirmButton>
+              </span>
+            ) },
         ]} />
       {unplaced.length > 0 && <p className="hint bad">Not in any region: {unplaced.map((o) => o.name).join(", ")}. Open each supermarket to choose its region.</p>}
       <p className="muted small">Choose each region's manager under People & access. Put a supermarket in a region from the supermarket's own details.</p>
@@ -81,10 +115,19 @@ function Regions() {
 }
 
 function Products() {
-  const { state } = useStore();
+  const { state, del } = useStore();
   const { money } = useLookup();
-  const { open } = useUI();
+  const { open, toast } = useUI();
   const nav = useNavigate();
+  const [busyId, setBusyId] = useState("");
+
+  const removeProduct = async (p) => {
+    setBusyId(p.id);
+    const ok = await del(`/api/products/${encodeURIComponent(p.id)}`);
+    setBusyId("");
+    if (ok) toast(`${p.name} deleted`);
+  };
+
   return (
     <Panel title="Products" right={<button className="btn primary" onClick={() => open("productForm")}>Add product</button>}>
       <DataTable rows={state.products.slice().sort(byKey("name"))} onRowClick={(p) => open("productForm", { id: p.id })} empty="No products yet."
@@ -93,6 +136,13 @@ function Products() {
           { label: "Price to supermarkets", num: true, render: (p) => money(p.price) },
           { label: "Shelf price", num: true, render: (p) => (p.shelf ? money(p.shelf) : "—") },
           { label: "Recipe", render: (p) => (state.bom.some((b) => b.productId === p.id) ? <Pill status={["Set", "good"]} /> : <Pill status={["Not set", "warn"]} />) },
+          { label: "", render: (p) => (
+              <span className="row-actions" onClick={(e) => e.stopPropagation()}>
+                <ConfirmButton className="btn small ghost warn-text" confirmText="Click again to delete" disabled={busyId === p.id} onConfirm={() => removeProduct(p)}>
+                  {busyId === p.id ? "Deleting…" : "Delete"}
+                </ConfirmButton>
+              </span>
+            ) },
         ]} />
       <button className="btn small ghost self-start" onClick={() => nav("/production")}>Recipes and raw materials are under Production →</button>
     </Panel>
@@ -100,9 +150,19 @@ function Products() {
 }
 
 function General() {
-  const { state } = useStore();
-  const { open } = useUI();
+  const { state, post, reload } = useStore();
+  const { open, toast } = useUI();
+  const [clearing, setClearing] = useState(false);
   const c = state.settings;
+
+  const clearCompanyData = async () => {
+    setClearing(true);
+    const ok = await post("/api/bulk", { mode: "replace", data: {} });
+    if (ok) await reload();
+    setClearing(false);
+    if (ok) toast("All company and operational records cleared.");
+  };
+
   return (
     <>
       <Panel title="Company" right={<button className="btn" onClick={() => open("settings")}>Edit</button>}>
@@ -113,6 +173,16 @@ function General() {
         </div>
       </Panel>
       <Backups />
+      <Panel eyebrow="Danger zone" title="Company data">
+        <p className="muted small">
+          Removes all supermarkets, regions, products, raw materials, batches, deliveries, sales, payments, adjustments, and report submissions. Your user accounts and company settings stay intact. Make a backup first if you want a copy.
+        </p>
+        <div className="actions">
+          <ConfirmButton className="btn ghost warn-text" confirmText="Click again to wipe all company data" disabled={clearing} onConfirm={clearCompanyData}>
+            {clearing ? "Clearing data…" : "Delete all company data"}
+          </ConfirmButton>
+        </div>
+      </Panel>
     </>
   );
 }
@@ -132,7 +202,7 @@ const ago = (iso) => {
   return `${d} day${d > 1 ? "s" : ""} ago`;
 };
 
-/** Back up with one click; restore any backup. */
+/** Back up with one click; restore or delete any backup. */
 function Backups() {
   const { toast } = useUI();
   const [list, setList] = useState(null);
@@ -163,6 +233,16 @@ function Backups() {
     } catch (e) { toast(e.message, "bad"); setWorking(""); }
   };
 
+  const removeBackup = async (b) => {
+    setWorking(b.name);
+    try {
+      await api.del(`/api/backups/${encodeURIComponent(b.name)}`);
+      toast(`Deleted backup from ${fmtWhen(b.createdAt)}`);
+      await load();
+    } catch (e) { toast(e.message, "bad"); }
+    setWorking("");
+  };
+
   const latest = list && list[0];
   return (
     <Panel eyebrow={latest ? `Last backup ${ago(latest.createdAt)}` : "Keep your records safe"} title="Backups"
@@ -180,8 +260,11 @@ function Backups() {
             ].map(([k, one, many]) => `${n0(k)} ${k === 1 ? one : many || one + "s"}`).join(" · ")}</span> },
             { label: "", render: (b) => (
               <span className="row-actions">
-                <ConfirmButton className="btn small" confirmText="Click again to restore" onConfirm={() => restore(b)}>
-                  {working === b.name ? "Restoring…" : "Restore"}
+                <ConfirmButton className="btn small" confirmText="Click again to restore" disabled={!!working} onConfirm={() => restore(b)}>
+                  {working === b.name ? "Working…" : "Restore"}
+                </ConfirmButton>
+                <ConfirmButton className="btn small ghost warn-text" confirmText="Click again to delete" disabled={!!working} onConfirm={() => removeBackup(b)}>
+                  Delete
                 </ConfirmButton>
                 <a className="icon-btn" href={`/api/backups/${encodeURIComponent(b.name)}/download`} download title="Download a copy" aria-label="Download a copy">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>

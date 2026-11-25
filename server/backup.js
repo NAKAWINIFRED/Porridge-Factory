@@ -70,6 +70,20 @@ async function readBackup(name) {
   return data;
 }
 
+async function deleteBackup(name) {
+  if (!NAME_RE.test(name)) throw new HttpError(404, "That backup doesn't exist.");
+  const full = path.join(BACKUP_DIR, name);
+  try {
+    await unlink(full);
+  } catch (e) {
+    if (e.code === "ENOENT") throw new HttpError(404, "That backup doesn't exist.");
+    throw e;
+  }
+  if (name.endsWith("_auto.json") && name.startsWith(stamp().slice(0, 10))) {
+    autoDay = null;
+  }
+}
+
 /** Replace every record with the backup's. A safety backup of the current records is made first. */
 async function restoreBackup(name) {
   const data = await readBackup(name);
@@ -121,6 +135,12 @@ export function backupRoutes(app, wrap) {
   app.post("/api/backups/:name/restore", requireUser, wrap(async (req, res) => {
     admin(req);
     res.json(await restoreBackup(req.params.name));
+  }));
+
+  app.delete("/api/backups/:name", requireUser, wrap(async (req, res) => {
+    admin(req);
+    await deleteBackup(req.params.name);
+    res.json({ ok: true });
   }));
 
   app.get("/api/backups/:name/download", requireUser, wrap(async (req, res) => {

@@ -10,30 +10,49 @@ import { Field, FormShell, Input, Row, Select, useForm } from "../components/For
 const list = (arr) => arr.map((x) => ({ value: x, label: x }));
 
 export function ShopForm({ id }) {
-  const { state, post, patch } = useStore();
+  const { state, post, patch, del } = useStore();
   const { O } = useLookup();
   const { done } = useUI();
   const o = O(id) || {};
   const [v, set] = useForm({ name: o.name || "", type: o.type || "Supermarket", regionId: o.regionId || "", area: o.area || "", contact: o.contact || "", phone: o.phone || "" });
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete "${o.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    const ok = await del(`/api/outlets/${encodeURIComponent(id)}`);
+    setDeleting(false);
+    if (ok) done(`${o.name} deleted`);
+  }
+
   return (
-    <FormShell onSubmit={async () => {
-      if (!v.name.trim()) return "Enter the supermarket's name.";
-      const ok = id ? await patch(`/api/outlets/${id}`, v) : await post("/api/outlets", v);
-      if (ok) done(id ? "Supermarket updated" : `${v.name} added`);
-    }}>
-      <Field id="name" label="Name"><Input id="name" v={v} set={set} placeholder="e.g. Ineza Supermarket" /></Field>
-      <Row>
-        <Field id="regionId" label="Region" hint={state.regions.length ? "The region's manager will see this supermarket." : "Add regions in Setup first."}>
-          <Select id="regionId" v={v} set={set} blank="No region" options={state.regions.slice().sort(byKey("name")).map((r) => ({ value: r.id, label: r.name }))} />
-        </Field>
-        <Field id="type" label="Type"><Select id="type" v={v} set={set} options={list(["Supermarket", "Shop", "Kiosk", "Market stall", "Wholesaler", "School / institution"])} /></Field>
-      </Row>
-      <Field id="area" label="Town / area"><Input id="area" v={v} set={set} placeholder="e.g. Nyamata" /></Field>
-      <Row>
-        <Field id="contact" label="Supermarket's contact person"><Input id="contact" v={v} set={set} /></Field>
-        <Field id="phone" label="Phone"><Input id="phone" type="tel" v={v} set={set} /></Field>
-      </Row>
-    </FormShell>
+    <>
+      <FormShell onSubmit={async () => {
+        if (!v.name.trim()) return "Enter the supermarket's name.";
+        const ok = id ? await patch(`/api/outlets/${id}`, v) : await post("/api/outlets", v);
+        if (ok) done(id ? "Supermarket updated" : `${v.name} added`);
+      }}>
+        <Field id="name" label="Name"><Input id="name" v={v} set={set} placeholder="e.g. Ineza Supermarket" /></Field>
+        <Row>
+          <Field id="regionId" label="Region" hint={state.regions.length ? "The region's manager will see this supermarket." : "Add regions in Setup first."}>
+            <Select id="regionId" v={v} set={set} blank="No region" options={state.regions.slice().sort(byKey("name")).map((r) => ({ value: r.id, label: r.name }))} />
+          </Field>
+          <Field id="type" label="Type"><Select id="type" v={v} set={set} options={list(["Supermarket", "Shop", "Kiosk", "Market stall", "Wholesaler", "School / institution"])} /></Field>
+        </Row>
+        <Field id="area" label="Town / area"><Input id="area" v={v} set={set} placeholder="e.g. Nyamata" /></Field>
+        <Row>
+          <Field id="contact" label="Supermarket's contact person"><Input id="contact" v={v} set={set} /></Field>
+          <Field id="phone" label="Phone"><Input id="phone" type="tel" v={v} set={set} /></Field>
+        </Row>
+      </FormShell>
+      {id && (
+        <div className="panel" style={{ marginTop: "1rem" }}>
+          <button type="button" className="btn ghost warn-text" disabled={deleting} onClick={handleDelete}>
+            {deleting ? "Deleting…" : "Delete supermarket"}
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

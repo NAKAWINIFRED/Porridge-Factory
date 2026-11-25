@@ -119,10 +119,11 @@ export function HistorySection({ rows, filter, label }) {
 
 /* ---------- Supermarket detail ---------- */
 function ShopDetail({ id }) {
-  const { state, me } = useStore();
+  const { state, me, del } = useStore();
   const L = useLookup();
-  const { open } = useUI();
+  const { open, close, toast } = useUI();
   const F = useFigures();
+  const [deleting, setDeleting] = useState(false);
   const all = useMemo(() => buildHistory(state, L), [state, L]);
   const o = L.O(id);
   if (!o) return <><DrawerHead eyebrow="Supermarket" title="Removed" /><div className="drawer-b"><Empty>This supermarket no longer exists.</Empty></div></>;
@@ -130,6 +131,17 @@ function ShopDetail({ id }) {
   const pending = state.dispatches.filter((d) => d.outletId === id && d.status === "in_transit");
   const rows = Object.entries(x.by).map(([pid, b]) => ({ id: pid, ...b }));
   const managers = state.users.filter((u) => u.role === "regional_manager" && (u.regionIds || []).includes(o.regionId));
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete "${o.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    const ok = await del(`/api/outlets/${encodeURIComponent(id)}`);
+    setDeleting(false);
+    if (ok) {
+      toast(`${o.name} deleted.`);
+      close();
+    }
+  }
 
   return (
     <>
@@ -142,6 +154,11 @@ function ShopDetail({ id }) {
           {can(me, "shopAdjust") && <button className="btn" onClick={() => open("count", { outletId: id })}>Stock count</button>}
           {can(me, "dispatch") && <button className="btn" onClick={() => open("dispatch", { outletId: id })}>Send stock</button>}
           {can(me, "setup") && <button className="btn ghost" onClick={() => open("shopForm", { id })}>Edit</button>}
+          {can(me, "setup") && (
+            <button className="btn ghost warn-text" disabled={deleting} onClick={handleDelete}>
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          )}
         </div>
         <div className="inline-meta">
           <Pill status={x.status} />
